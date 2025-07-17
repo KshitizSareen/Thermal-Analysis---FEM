@@ -3,6 +3,7 @@ from typing import Tuple, Dict, List
 from enum import Enum
 import numpy as np
 import time
+import csv
 
 
 class TriangleType(Enum):
@@ -23,8 +24,8 @@ def compute_area_of_triangle(x1: float, x2: float, x3: float,
 def formulate_k_values(x1: float, x2: float, x3: float,
                        y1: float, y2: float, y3: float) -> Tuple[float, float, float, float, float, float]:
     return (
-        y2 - y1, y3 - y1, y1 - y2,
-        x3 - x2, x1 - x3, x2 - x1
+        y2 - y3, y3 - y1, y1 - y2,  
+        x3 - x2, x1 - x3, x2 - x1   
     )
 
 
@@ -73,21 +74,36 @@ def formulate_B_Matrix(hout: float, Tout: float, T1: float, T2: float, T3: float
                        x1: float, x2: float, x3: float,
                        y1: float, y2: float, y3: float) -> List[float]:
     
-    if triangle_type == TriangleType.INTERNAL:
-        return [0.0, 0.0, 0.0]
 
     result = [0.0, 0.0, 0.0]
+    
+    if hout == 0 or triangle_type == TriangleType.INTERNAL:
+        return result
 
-    if triangle_type in {TriangleType.LEFT, TriangleType.BOTTOM_LEFT, TriangleType.TOP_RIGHT, TriangleType.RIGHT}:
-        le_y = abs(y2 - y1)
-        edge_result = _conv_vector(hout, Tout, T1, T2, le_y, 0, 1)
+    # Helper function for adding contributions
+    def add_edge_contribution(nodes_temp, node_indices, edge_len):
+        nonlocal result
+        T_start, T_end = nodes_temp
+        idx_start, idx_end = node_indices
+        edge_result = _conv_vector(hout, Tout, T_start, T_end, edge_len, idx_start, idx_end)
         result = [sum(x) for x in zip(result, edge_result)]
 
-    if triangle_type in {TriangleType.BOTTOM, TriangleType.BOTTOM_LEFT, TriangleType.TOP_RIGHT, TriangleType.TOP}:
-        le_x = abs(x3 - x2)
-        edge_result = _conv_vector(hout, Tout, T1, T3, le_x, 0, 2)
-        result = [sum(x) for x in zip(result, edge_result)]
+    if triangle_type in {TriangleType.LEFT, TriangleType.BOTTOM_LEFT}:
+        length = abs(y2 - y1)
+        add_edge_contribution((T1, T2), (0, 1), length)
 
+    if triangle_type in {TriangleType.BOTTOM, TriangleType.BOTTOM_LEFT}:
+        length = abs(x3 - x1) 
+        add_edge_contribution((T1, T3), (0, 2), length)
+
+    if triangle_type in {TriangleType.TOP, TriangleType.TOP_RIGHT}:
+        length = abs(x2 - x1) 
+        add_edge_contribution((T1, T2), (0, 1), length)
+        
+    if triangle_type in {TriangleType.RIGHT, TriangleType.TOP_RIGHT}:
+        length = abs(y3 - y1)
+        add_edge_contribution((T1, T3), (0, 2), length)
+        
     return result
 
 def formulate_F_matrix(x1: float, x2: float, x3: float,
@@ -121,22 +137,23 @@ def _initialize_temp_dict(num_div_x: int, num_div_y: int, initialTemp: float) ->
 
 def _identify_triangle_type(i: int, j: int, triangle_kind: str,
                             num_div_y: int, num_div_x: int) -> TriangleType:
+    is_on_left = (j == 0)
+    is_on_right = (j == num_div_x - 1)
+    is_on_top = (i == 0)
+    is_on_bottom = (i == num_div_y - 1)
+
     if triangle_kind == 'lower':
-        if j == 0:
-            if i < num_div_y - 1:
-                return TriangleType.LEFT
-            elif i == num_div_y - 1:
-                return TriangleType.BOTTOM_LEFT
-        elif i == num_div_y - 1 and j > 0:
-            return TriangleType.BOTTOM
-    elif triangle_kind == 'upper':
-        if j == num_div_x - 1:
-            if i > 0:
-                return TriangleType.RIGHT
-            elif i == 0:
-                return TriangleType.TOP_RIGHT
-        elif i == 0 and j < num_div_x - 1:
-            return TriangleType.TOP
+        if is_on_left and is_on_bottom: return TriangleType.BOTTOM_LEFT
+        if is_on_left: return TriangleType.LEFT
+        if is_on_bottom: return TriangleType.BOTTOM
+        # ... and so on for other boundaries if needed
+
+    elif triangle_kind == 'upper': 
+        if is_on_right and is_on_top: return TriangleType.TOP_RIGHT
+        if is_on_right: return TriangleType.RIGHT
+        if is_on_top: return TriangleType.TOP
+        # ...
+
     return TriangleType.INTERNAL
 
 
@@ -231,24 +248,24 @@ def generate_temp_points(width: float, height: float,
     for i in range(num_div_y):
         for j in range(num_div_x):
             # Lower triangle
-            T1 = base_index * i + j
-            T2 = base_index * (i + 1) + j
+            T1 =  base_index * (i + 1) + j
+            T2 = base_index * i + j
             T3 = base_index * (i + 1) + (j + 1)
 
-            x1, y1 = j * x_interval, i * y_interval
-            x2, y2 = j * x_interval, (i + 1) * y_interval
+            x1, y1 = j * x_interval, (i + 1) * y_interval
+            x2, y2 = j * x_interval, i * y_interval
             x3, y3 = (j + 1) * x_interval, (i + 1) * y_interval
 
             _process_triangle(i, j, 'lower', num_div_y,num_div_x,x1, y1, x2, y2, x3, y3,
                               T1, T2, T3, Q, hout, Tout, KDict, CDict, FDict,TempDict)
 
             # Upper triangle
-            T1 = base_index * i + j
-            T2 = base_index * i + (j + 1)
+            T1 = base_index * i + (j + 1)
+            T2 = base_index * i + j
             T3 = base_index * (i + 1) + (j + 1)
 
-            x1, y1 = j * x_interval, i * y_interval
-            x2, y2 = (j + 1) * x_interval, i * y_interval
+            x1, y1 = (j + 1) * x_interval, i * y_interval
+            x2, y2 = j * x_interval, i * y_interval
             x3, y3 = (j + 1) * x_interval, (i + 1) * y_interval
 
             _process_triangle(i, j, 'upper', num_div_y,num_div_x, x1, y1, x2, y2, x3, y3,
@@ -264,7 +281,7 @@ def generate_temp_points(width: float, height: float,
 
 
 
-    return np.dot(np.linalg.inv(A),D)
+    return np.linalg.solve(A, D)
 
 
 import numpy as np
@@ -286,40 +303,80 @@ def compute_T(timestep: float, duration: float, initialTemp: float,
               num_div_x: int, num_div_y: int, width: float,
               height: float, hout: float, Tout: float, Q: float,
               thermal_conductivity: float, specific_heat_capacity: float, density: float):
-    
+
     # Initialize temperature dictionary
     TempDict = _initialize_temp_dict(num_div_x, num_div_y, initialTemp)
     steps = int(duration / timestep)
 
-    # Set up the plot
-    fig, ax = plt.subplots()
-    matrix = convertTempDictToT(TempDict, num_div_y, num_div_x)
-    img = ax.imshow(matrix, cmap='hot', interpolation='nearest', origin='lower', vmin=0, vmax=200)
-    plt.colorbar(img, ax=ax)
-    title = ax.set_title("Temperature Evolution")
-    plt.xlabel("X")
-    plt.ylabel("Y")
+    # Calculate real coordinates of grid points
+    x_interval = width / num_div_x
+    y_interval = height / num_div_y
 
-    # Animation update function
-    def update(frame):
-        nonlocal TempDict
-        T = generate_temp_points(width, height, num_div_x, num_div_y, hout, Tout, TempDict,
-                                 Q, timestep, thermal_conductivity, specific_heat_capacity, density)
-        size = (num_div_x + 1) * (num_div_y + 1)
-        for j in range(size):
-            TempDict[j] = T[j]
-        
+    point_coords = []
+    for idx in range((num_div_x + 1) * (num_div_y + 1)):
+        x_idx = idx % (num_div_x + 1)
+        y_idx = idx // (num_div_x + 1)
+        x = round(x_idx * x_interval, 5)
+        y = round(y_idx * y_interval, 5)
+        point_coords.append((x, y))
+
+    # Setup CSV output
+    csv_filename = "temperature_output.csv"
+    headers = ["Timestamp", "Q"] + [f"({x},{y})" for (x, y) in point_coords]
+
+    with open(csv_filename, mode='w', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=headers)
+        writer.writeheader()
+
+        # Set up the plot
+        fig, ax = plt.subplots()
         matrix = convertTempDictToT(TempDict, num_div_y, num_div_x)
-        img.set_data(matrix)
-        title.set_text(f"Time = {frame * timestep:.1f}s")
-        return [img]
+        img = ax.imshow(matrix, cmap='hot', interpolation='nearest', origin='lower', vmin=0, vmax=200)
+        plt.colorbar(img, ax=ax)
+        title = ax.set_title("Temperature Evolution")
+        plt.xlabel("X")
+        plt.ylabel("Y")
 
-    # Create animation (disable blitting)
-    ani = FuncAnimation(fig, update, frames=range(steps), interval=timestep * 1000, blit=False)
-    plt.show()
+        # Animation update function
+        def update(frame):
+            nonlocal TempDict
+            T = generate_temp_points(width, height, num_div_x, num_div_y, hout, Tout, TempDict,
+                                     Q, timestep, thermal_conductivity, specific_heat_capacity, density)
+
+            for j in range(len(T)):
+                TempDict[j] = T[j]
+
+            # Write to CSV
+            row = {"Timestamp": round(frame * timestep, 3), "Q": Q}
+            for idx, (x, y) in enumerate(point_coords):
+                row[f"({x},{y})"] = TempDict[idx]
+            writer.writerow(row)
+
+            # Update visualization
+            matrix = convertTempDictToT(TempDict, num_div_y, num_div_x)
+            img.set_data(matrix)
+            title.set_text(f"Time = {frame * timestep:.1f}s")
+            return [img]
+
+        # Create animation
+        ani = FuncAnimation(fig, update, frames=range(steps), interval=1000, blit=False)
+        plt.show()
 
 
 
 
-
-compute_T(1,100000,50,1,1,100,100,1,20,-1,2.87,0.4,10)
+compute_T(
+    timestep=0.1,      # seconds
+    duration=100,       # seconds
+    initialTemp=21.23,     # °C
+    num_div_x=50,
+    num_div_y=50,
+    width=15,          # cm
+    height=30,         # cm
+    hout=0,         # W/(cm²·°C) - much smaller in CGS
+    Tout=22,            # °C
+    Q=0.212,            # W/cm³ - much smaller in CGS
+    thermal_conductivity=0.0153,  # W/(cm·°C)
+    specific_heat_capacity=0.96,  # J/(g·°C)
+    density=1.68        # g/cm³
+)
