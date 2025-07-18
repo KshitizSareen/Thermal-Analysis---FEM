@@ -306,8 +306,6 @@ def compute_T(timestep: float, duration: float, initialTemp: float,
 
     # Initialize temperature dictionary
     TempDict = _initialize_temp_dict(num_div_x, num_div_y, initialTemp)
-    steps = int(duration / timestep)
-
     # Calculate real coordinates of grid points
     x_interval = width / num_div_x
     y_interval = height / num_div_y
@@ -327,40 +325,22 @@ def compute_T(timestep: float, duration: float, initialTemp: float,
     with open(csv_filename, mode='w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=headers)
         writer.writeheader()
+        t=1
+        while t<=duration:
 
-        # Set up the plot
-        fig, ax = plt.subplots()
-        matrix = convertTempDictToT(TempDict, num_div_y, num_div_x)
-        img = ax.imshow(matrix, cmap='hot', interpolation='nearest', origin='lower', vmin=0, vmax=200)
-        plt.colorbar(img, ax=ax)
-        title = ax.set_title("Temperature Evolution")
-        plt.xlabel("X")
-        plt.ylabel("Y")
-
-        # Animation update function
-        def update(frame):
-            nonlocal TempDict
             T = generate_temp_points(width, height, num_div_x, num_div_y, hout, Tout, TempDict,
-                                     Q, timestep, thermal_conductivity, specific_heat_capacity, density)
+                                        Q, timestep, thermal_conductivity, specific_heat_capacity, density)
 
             for j in range(len(T)):
                 TempDict[j] = T[j]
 
             # Write to CSV
-            row = {"Timestamp": round(frame * timestep, 3), "Q": Q}
+            row = {"Timestamp": round(t, 3), "Q": Q}
             for idx, (x, y) in enumerate(point_coords):
                 row[f"({x},{y})"] = TempDict[idx]
             writer.writerow(row)
+            t+=timestep
 
-            # Update visualization
-            matrix = convertTempDictToT(TempDict, num_div_y, num_div_x)
-            img.set_data(matrix)
-            title.set_text(f"Time = {frame * timestep:.1f}s")
-            return [img]
-
-        # Create animation
-        ani = FuncAnimation(fig, update, frames=range(steps), interval=1000, blit=False)
-        plt.show()
 
 
 
@@ -369,8 +349,8 @@ compute_T(
     timestep=0.1,      # seconds
     duration=100,       # seconds
     initialTemp=21.23,     # °C
-    num_div_x=50,
-    num_div_y=50,
+    num_div_x=70,
+    num_div_y=70,
     width=15,          # cm
     height=30,         # cm
     hout=0,         # W/(cm²·°C) - much smaller in CGS
