@@ -346,17 +346,17 @@ def compute_T(timestep: float, duration: float, initialTemp: float,
 
 
 compute_T(
-    timestep=0.1,      # seconds
-    duration=100,       # seconds
+    timestep=0.04,      # seconds
+    duration=2,       # seconds
     initialTemp=21.23,     # °C
-    num_div_x=70,
-    num_div_y=70,
-    width=15,          # cm
-    height=30,         # cm
+    num_div_x=25,
+    num_div_y=25,
+    width=1,          # cm
+    height=1,         # cm
     hout=0,         # W/(cm²·°C) - much smaller in CGS
     Tout=22,            # °C
-    Q=0.212,            # W/cm³ - much smaller in CGS
-    thermal_conductivity=0.0153,  # W/(cm·°C)
+    Q=0.085,            # W/cm³ - much smaller in CGS
+    thermal_conductivity=0.000624,  # W/(cm·°C)
     specific_heat_capacity=0.96,  # J/(g·°C)
     density=1.68        # g/cm³
 )
