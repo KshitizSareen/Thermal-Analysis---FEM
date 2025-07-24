@@ -2,19 +2,10 @@ from collections import defaultdict
 from typing import Tuple, Dict, List
 from enum import Enum
 import numpy as np
-import time
 import csv
-
-
-class TriangleType(Enum):
-    LEFT = 0
-    BOTTOM_LEFT = 1
-    BOTTOM = 2
-    BOTTOM_RIGHT = 3
-    RIGHT = 4
-    TOP_RIGHT = 5
-    TOP = 6
-    INTERNAL = 7
+import numpy as np
+import matplotlib.pyplot as plt
+from typing import Dict
 
 def compute_area_of_triangle(x1: float, x2: float, x3: float,
                              y1: float, y2: float, y3: float) -> float:
@@ -59,61 +50,11 @@ def formulate_Q_Matrix(x1: float, x2: float, x3: float,
     return [q_value] * 3
 
 
-def _conv_vector(hout: float, Tout: float, T1: float, T2: float, length: float, idx1: int, idx2: int) -> List[float]:
-    """Helper to compute convection contribution over a single edge."""
-    coeff1 = (hout * length / 6) * (3 * Tout - 2 * T1 - T2)
-    coeff2 = (hout * length / 6) * (3 * Tout - 2 * T2 - T1)
-    result = [0.0, 0.0, 0.0]
-    result[idx1] = coeff1
-    result[idx2] = coeff2
-    return result
-
-
-def formulate_B_Matrix(hout: float, Tout: float, T1: float, T2: float, T3: float,
-                       triangle_type: TriangleType,
-                       x1: float, x2: float, x3: float,
-                       y1: float, y2: float, y3: float) -> List[float]:
-    
-
-    result = [0.0, 0.0, 0.0]
-    
-    if hout == 0 or triangle_type == TriangleType.INTERNAL:
-        return result
-
-    # Helper function for adding contributions
-    def add_edge_contribution(nodes_temp, node_indices, edge_len):
-        nonlocal result
-        T_start, T_end = nodes_temp
-        idx_start, idx_end = node_indices
-        edge_result = _conv_vector(hout, Tout, T_start, T_end, edge_len, idx_start, idx_end)
-        result = [sum(x) for x in zip(result, edge_result)]
-
-    if triangle_type in {TriangleType.LEFT, TriangleType.BOTTOM_LEFT}:
-        length = abs(y2 - y1)
-        add_edge_contribution((T1, T2), (0, 1), length)
-
-    if triangle_type in {TriangleType.BOTTOM, TriangleType.BOTTOM_LEFT}:
-        length = abs(x3 - x1) 
-        add_edge_contribution((T1, T3), (0, 2), length)
-
-    if triangle_type in {TriangleType.TOP, TriangleType.TOP_RIGHT}:
-        length = abs(x2 - x1) 
-        add_edge_contribution((T1, T2), (0, 1), length)
-        
-    if triangle_type in {TriangleType.RIGHT, TriangleType.TOP_RIGHT}:
-        length = abs(y3 - y1)
-        add_edge_contribution((T1, T3), (0, 2), length)
-        
-    return result
-
 def formulate_F_matrix(x1: float, x2: float, x3: float,
                         y1: float, y2: float, y3: float,
-                        Q: float,hout: float, Tout: float, 
-                        T1: float, T2: float, T3: float,
-                        triangle_type: TriangleType):
-                        B_Matrix = formulate_B_Matrix(hout,Tout,T1,T2,T3,triangle_type,x1,x2,x3,y1,y2,y3)
+                        Q: float):
                         Q_Matrix = formulate_Q_Matrix(x1,x2,x3,y1,y2,y3,Q)
-                        return [B_Matrix[0]+Q_Matrix[0],B_Matrix[1]+Q_Matrix[1],B_Matrix[2]+Q_Matrix[2]]
+                        return Q_Matrix
     
 
 def accumulate_matrix(global_dict: Dict[Tuple[int, int], float],
@@ -135,46 +76,21 @@ def _initialize_temp_dict(num_div_x: int, num_div_y: int, initialTemp: float) ->
 
     return TempDict
 
-def _identify_triangle_type(i: int, j: int, triangle_kind: str,
-                            num_div_y: int, num_div_x: int) -> TriangleType:
-    is_on_left = (j == 0)
-    is_on_right = (j == num_div_x - 1)
-    is_on_top = (i == 0)
-    is_on_bottom = (i == num_div_y - 1)
 
-    if triangle_kind == 'lower':
-        if is_on_left and is_on_bottom: return TriangleType.BOTTOM_LEFT
-        if is_on_left: return TriangleType.LEFT
-        if is_on_bottom: return TriangleType.BOTTOM
-        # ... and so on for other boundaries if needed
-
-    elif triangle_kind == 'upper': 
-        if is_on_right and is_on_top: return TriangleType.TOP_RIGHT
-        if is_on_right: return TriangleType.RIGHT
-        if is_on_top: return TriangleType.TOP
-        # ...
-
-    return TriangleType.INTERNAL
-
-
-def _process_triangle(i: int, j: int, triangle_kind: str,
-                      num_div_y: int, num_div_x: int,
+def _process_triangle(
                       x1: float, y1: float, x2: float, y2: float, x3: float, y3: float,
                       T1: int, T2: int, T3: int,
-                      Q: float, hout: float, Tout: float,
+                      Q: float,
                       KDict: Dict[Tuple[int, int], float],
                       CDict: Dict[Tuple[int, int], float],
-                      FDict: Dict[int, float],
-                      TDict: Dict[int, float]) -> None:
+                      FDict: Dict[int, float]) -> None:
     
     T_array = [T1, T2, T3]
-    triangle_type_enum = _identify_triangle_type(i, j, triangle_kind, num_div_y, num_div_x)
 
     K = formulate_k_matrix(x1, x2, x3, y1, y2, y3)
     C = formulate_C_matrix(x1, x2, x3, y1, y2, y3)
     F = formulate_F_matrix(
-        x1, x2, x3, y1, y2, y3, Q, hout, Tout,
-        TDict[T1], TDict[T2], TDict[T3], triangle_type_enum
+        x1, x2, x3, y1, y2, y3, Q
     )
 
     accumulate_matrix(KDict, T_array, K)
@@ -233,7 +149,6 @@ def formulate_D_matrix(F,C,timestep,T):
 
 def generate_temp_points(width: float, height: float,
                          num_div_x: int, num_div_y: int,
-                         hout: float, Tout: float,
                          TempDict: Dict[int,float], Q: float,timestep: float,
                          thermal_conductivity: float,specific_heat_capacity: float,density: float) -> np.ndarray:
 
@@ -256,8 +171,8 @@ def generate_temp_points(width: float, height: float,
             x2, y2 = j * x_interval, i * y_interval
             x3, y3 = (j + 1) * x_interval, (i + 1) * y_interval
 
-            _process_triangle(i, j, 'lower', num_div_y,num_div_x,x1, y1, x2, y2, x3, y3,
-                              T1, T2, T3, Q, hout, Tout, KDict, CDict, FDict,TempDict)
+            _process_triangle(x1, y1, x2, y2, x3, y3,
+                              T1, T2, T3, Q,  KDict, CDict, FDict)
 
             # Upper triangle
             T1 = base_index * i + (j + 1)
@@ -268,8 +183,8 @@ def generate_temp_points(width: float, height: float,
             x2, y2 = j * x_interval, i * y_interval
             x3, y3 = (j + 1) * x_interval, (i + 1) * y_interval
 
-            _process_triangle(i, j, 'upper', num_div_y,num_div_x, x1, y1, x2, y2, x3, y3,
-                              T1, T2, T3, Q, hout, Tout, KDict, CDict, FDict,TempDict)
+            _process_triangle(x1, y1, x2, y2, x3, y3,
+                              T1, T2, T3, Q,  KDict, CDict, FDict)
     
     K = create_global_K_matrix(KDict,num_div_x,num_div_y,thermal_conductivity)
     C = create_global_C_matrix(CDict,num_div_x,num_div_y,specific_heat_capacity,density)
@@ -284,11 +199,6 @@ def generate_temp_points(width: float, height: float,
     return np.linalg.solve(A, D)
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.animation import  FuncAnimation
-from typing import Dict
-
 def convertTempDictToT(TempDict: Dict[int, float], num_div_y: int, num_div_x: int) -> np.ndarray:
     T = np.zeros((num_div_y + 1, num_div_x + 1))
     base_index = num_div_x + 1
@@ -301,7 +211,7 @@ def convertTempDictToT(TempDict: Dict[int, float], num_div_y: int, num_div_x: in
 
 def compute_T(timestep: float, duration: float, initialTemp: float,
               num_div_x: int, num_div_y: int, width: float,
-              height: float, hout: float, Tout: float, Q: float,
+              height: float,  Q: float,
               thermal_conductivity: float, specific_heat_capacity: float, density: float):
 
     # Initialize temperature dictionary
@@ -335,10 +245,10 @@ def compute_T(timestep: float, duration: float, initialTemp: float,
         plt.tight_layout()
         plt.show()
 
-        t = 1
+        t = 0
         while t <= duration:
             # Compute new temperature
-            T = generate_temp_points(width, height, num_div_x, num_div_y, hout, Tout, TempDict,
+            T = generate_temp_points(width, height, num_div_x, num_div_y, TempDict,
                                      Q, timestep, thermal_conductivity, specific_heat_capacity, density)
 
             # Update TempDict
@@ -367,31 +277,15 @@ def compute_T(timestep: float, duration: float, initialTemp: float,
 
 
 compute_T(
-<<<<<<< HEAD
-    timestep=0.04,      # seconds
-    duration=2,       # seconds
+    timestep=0.01,      # seconds
+    duration=10,       # seconds
     initialTemp=21.23,     # °C
-    num_div_x=25,
-    num_div_y=25,
+    num_div_x=50,
+    num_div_y=50,
     width=1,          # cm
-    height=1,         # cm
-    hout=0,         # W/(cm²·°C) - much smaller in CGS
-    Tout=22,            # °C
-    Q=0.085,            # W/cm³ - much smaller in CGS
-    thermal_conductivity=0.000624,  # W/(cm·°C)
-=======
-    timestep=1,      # seconds
-    duration=100,       # seconds
-    initialTemp=21.23,     # °C
-    num_div_x=30,
-    num_div_y=30,
-    width=15,          # cm
-    height=30,         # cm
-    hout=0,         # W/(cm²·°C) - much smaller in CGS
-    Tout=22,            # °C
-    Q=1.0,            # W/cm³ - much smaller in CGS
-    thermal_conductivity=0.0153,  # W/(cm·°C)
->>>>>>> a01e608b0af89eba36ec219323a47857eafdbc16
+    height=1,         # cm     
+    Q=2.192,            # W/cm³ - much smaller in CGS
+    thermal_conductivity=0.095,  # W/(cm·°C)
     specific_heat_capacity=0.96,  # J/(g·°C)
     density=1.68        # g/cm³
 )
