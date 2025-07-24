@@ -286,7 +286,7 @@ def generate_temp_points(width: float, height: float,
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+from matplotlib.animation import  FuncAnimation
 from typing import Dict
 
 def convertTempDictToT(TempDict: Dict[int, float], num_div_y: int, num_div_x: int) -> np.ndarray:
@@ -306,31 +306,42 @@ def compute_T(timestep: float, duration: float, initialTemp: float,
 
     # Initialize temperature dictionary
     TempDict = _initialize_temp_dict(num_div_x, num_div_y, initialTemp)
+
     # Calculate real coordinates of grid points
     x_interval = width / num_div_x
     y_interval = height / num_div_y
+    point_coords = [(round(j * x_interval, 5), round(i * y_interval, 5))
+                    for i in range(num_div_y + 1) for j in range(num_div_x + 1)]
 
-    point_coords = []
-    for idx in range((num_div_x + 1) * (num_div_y + 1)):
-        x_idx = idx % (num_div_x + 1)
-        y_idx = idx // (num_div_x + 1)
-        x = round(x_idx * x_interval, 5)
-        y = round(y_idx * y_interval, 5)
-        point_coords.append((x, y))
+    num_rows = num_div_y + 1
+    num_cols = num_div_x + 1
 
     # Setup CSV output
     csv_filename = "temperature_output.csv"
     headers = ["Timestamp", "Q"] + [f"({x},{y})" for (x, y) in point_coords]
-
     with open(csv_filename, mode='w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=headers)
         writer.writeheader()
-        t=1
-        while t<=duration:
 
+        # Set up the live plot
+        plt.ion()  # Turn on interactive mode
+        fig, ax = plt.subplots()
+        matrix = np.full((num_rows, num_cols), initialTemp)
+        img = ax.imshow(matrix, cmap='hot', origin='lower', aspect='auto', vmin=initialTemp, vmax=initialTemp + 100)
+        cbar = plt.colorbar(img, ax=ax, label="Temperature")
+        ax.set_title("Temperature Evolution")
+        ax.set_xlabel("X divisions")
+        ax.set_ylabel("Y divisions")
+        plt.tight_layout()
+        plt.show()
+
+        t = 1
+        while t <= duration:
+            # Compute new temperature
             T = generate_temp_points(width, height, num_div_x, num_div_y, hout, Tout, TempDict,
-                                        Q, timestep, thermal_conductivity, specific_heat_capacity, density)
+                                     Q, timestep, thermal_conductivity, specific_heat_capacity, density)
 
+            # Update TempDict
             for j in range(len(T)):
                 TempDict[j] = T[j]
 
@@ -339,13 +350,24 @@ def compute_T(timestep: float, duration: float, initialTemp: float,
             for idx, (x, y) in enumerate(point_coords):
                 row[f"({x},{y})"] = TempDict[idx]
             writer.writerow(row)
-            t+=timestep
+
+            # Reshape T into 2D matrix and update the heatmap
+            T_matrix = np.array(T).reshape((num_rows, num_cols))
+            img.set_data(T_matrix)
+            ax.set_title(f"Temperature at t = {round(t, 2)}s")
+            plt.pause(0.1)  # Pause to refresh plot
+
+            t += timestep
+
+        plt.ioff()  # Turn off interactive mode
+        plt.show()
 
 
 
 
 
 compute_T(
+<<<<<<< HEAD
     timestep=0.04,      # seconds
     duration=2,       # seconds
     initialTemp=21.23,     # °C
@@ -357,6 +379,19 @@ compute_T(
     Tout=22,            # °C
     Q=0.085,            # W/cm³ - much smaller in CGS
     thermal_conductivity=0.000624,  # W/(cm·°C)
+=======
+    timestep=1,      # seconds
+    duration=100,       # seconds
+    initialTemp=21.23,     # °C
+    num_div_x=30,
+    num_div_y=30,
+    width=15,          # cm
+    height=30,         # cm
+    hout=0,         # W/(cm²·°C) - much smaller in CGS
+    Tout=22,            # °C
+    Q=1.0,            # W/cm³ - much smaller in CGS
+    thermal_conductivity=0.0153,  # W/(cm·°C)
+>>>>>>> a01e608b0af89eba36ec219323a47857eafdbc16
     specific_heat_capacity=0.96,  # J/(g·°C)
     density=1.68        # g/cm³
 )
