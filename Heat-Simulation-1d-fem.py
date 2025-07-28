@@ -51,9 +51,7 @@ def compute_T_1d(timestep: float, duration: float, initial_temp: float,
                  num_div: int, length: float, Q: float,
                  thermal_conductivity: float, specific_heat_capacity: float, density: float):
     
-    # Initialize temperature vector
-    T_dict = initialize_temp_dict(num_div, initial_temp)
-    T_vec = np.array([T_dict[i] for i in range(num_div + 1)])
+    T_vec = np.array([initial_temp for i in range(num_div + 1)])
 
     dx = length / num_div
     K = assemble_global_matrices(num_div, thermal_conductivity, density, specific_heat_capacity, dx)[0]
@@ -76,7 +74,10 @@ def compute_T_1d(timestep: float, duration: float, initial_temp: float,
         ax.set_title("1D Heat Conduction")
         plt.grid()
 
-        t = 0
+        row = [round(0, 2), Q] + list(T_vec)
+        writer.writerow(row)
+
+        t = timestep
         while t <= duration:
             D = F + (1 / timestep) * (C @ T_vec)
             T_vec = np.linalg.solve(A, D)
