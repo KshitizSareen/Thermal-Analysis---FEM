@@ -78,6 +78,7 @@ def compute_T_1d(timestep: float, duration: float, initial_temp: float,
         writer.writerow(row)
 
         t = timestep
+        duration = round(duration,2)
         while t <= duration:
             D = F + (1 / timestep) * (C @ T_vec)
             T_vec = np.linalg.solve(A, D)
@@ -91,6 +92,8 @@ def compute_T_1d(timestep: float, duration: float, initial_temp: float,
             ax.set_title(f"Temperature at t = {round(t, 2)} s")
             plt.pause(0.05)
             t += timestep
+            t = round(t,2)
+            print(t)
 
         plt.ioff()
         plt.show()
@@ -100,8 +103,8 @@ compute_T_1d(
     duration=10,
     initial_temp=21.23,
     num_div=100,
-    length=10.0,
-    Q=2.192,
+    length=10,
+    Q=1.94,
     thermal_conductivity=10,
     specific_heat_capacity=0.96,
     density=1.68
