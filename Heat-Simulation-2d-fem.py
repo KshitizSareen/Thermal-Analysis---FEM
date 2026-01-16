@@ -65,14 +65,23 @@ def accumulate_matrix(global_dict: Dict[Tuple[int, int], float],
             global_dict[(row, col)] += local_matrix[i][j]
 
 
-def _initialize_temp_dict(num_div_x: int, num_div_y: int, initialTemp: float) -> Dict[int, float]:
+def _initialize_temp_dict(num_div_x: int, num_div_y: int, initialTemp: float,
+                          x_interval: float, y_interval: float) -> Dict[int, float]:
+    """
+    Initialize temperature dictionary with T(x,y,0) = 20 + x² + y²
+    
+    Node ordering: row-major (y varies slower, x varies faster)
+    Index = i * (num_div_x + 1) + j where i is row (y), j is column (x)
+    """
     base_index = num_div_x + 1
     TempDict = defaultdict(float)
 
-    for i in range(num_div_y + 1):  # Include top edge
-        for j in range(num_div_x + 1):  # Include right edge
+    for i in range(num_div_y + 1):  # rows (y direction)
+        for j in range(num_div_x + 1):  # columns (x direction)
             node_id = base_index * i + j
-            TempDict[node_id] = initialTemp
+            x_value = j * x_interval
+            y_value = i * y_interval
+            TempDict[node_id] = 20 + (x_value ** 2) + (y_value ** 2)
 
     return TempDict
 
@@ -211,15 +220,15 @@ def convertTempDictToT(TempDict: Dict[int, float], num_div_y: int, num_div_x: in
 
 def compute_T(timestep: float, duration: float, initialTemp: float,
               num_div_x: int, num_div_y: int, width: float,
-              height: float,  Q: float,
+              height: float, Q: float,
               thermal_conductivity: float, specific_heat_capacity: float, density: float):
 
-    # Initialize temperature dictionary
-    TempDict = _initialize_temp_dict(num_div_x, num_div_y, initialTemp)
-
-    # Calculate real coordinates of grid points
+    # Calculate intervals first
     x_interval = width / num_div_x
     y_interval = height / num_div_y
+
+    # Initialize temperature dictionary with IC: T = 20 + x² + y²
+    TempDict = _initialize_temp_dict(num_div_x, num_div_y, initialTemp, x_interval, y_interval)
     point_coords = [(round(j * x_interval, 5), round(i * y_interval, 5))
                     for i in range(num_div_y + 1) for j in range(num_div_x + 1)]
 
@@ -233,6 +242,11 @@ def compute_T(timestep: float, duration: float, initialTemp: float,
         writer = csv.DictWriter(csvfile, fieldnames=headers)
         writer.writeheader()
 
+        # Write to CSV
+        row = {"Timestamp": round(0, 3), "Q": Q}
+        for idx, (x, y) in enumerate(point_coords):
+            row[f"({x},{y})"] = TempDict[idx]
+        writer.writerow(row)
         # Set up the live plot
         plt.ion()  # Turn on interactive mode
         fig, ax = plt.subplots()
@@ -245,7 +259,7 @@ def compute_T(timestep: float, duration: float, initialTemp: float,
         plt.tight_layout()
         plt.show()
 
-        t = 0
+        t = timestep
         while t <= duration:
             # Compute new temperature
             T = generate_temp_points(width, height, num_div_x, num_div_y, TempDict,
@@ -277,11 +291,11 @@ def compute_T(timestep: float, duration: float, initialTemp: float,
 
 
 compute_T(
-    timestep=0.1,      # seconds
-    duration=10,       # seconds
+    timestep=0.01,      # seconds
+    duration=1.0,       # seconds
     initialTemp=21.23,     # °C
-    num_div_x=10,
-    num_div_y=10,
+    num_div_x=50,
+    num_div_y=50,
     width=1,          # cm
     height=1,         # cm     
     Q=2.192,            # W/cm³ - much smaller in CGS
